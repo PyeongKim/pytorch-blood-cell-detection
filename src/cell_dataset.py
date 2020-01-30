@@ -4,7 +4,7 @@ from random import randint
 import torch
 import cv2
 from torch.utils.data.dataset import Dataset
-# from pre_process import *
+from pre_process import *
 
 
 class CellDataset(Dataset):
