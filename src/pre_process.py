@@ -6,24 +6,27 @@ import cv2
 import xml.etree.ElementTree as ETree
 import torchvision.transforms.functional as TF
 
-# from google.colab import drive
-# drive.mount('/content/gdrive')
-
 cell_subtypes = ("RBC", "WBC", "Platelets")
 subtypes_map = {key: i+1 for i, key in enumerate(cell_subtypes)}
 distinct_colors = ['#3cb44b', '#ffe119', '#0082c8']
 subtypes_color_map = {key: distinct_colors[i] for i, key in enumerate(subtypes_map)}
 
 def parse_annotation(xml_path):
+  """
+  Args: 
+    xml_path (str): path to xml file
+  Return:
+    obejct_ (list): location of the ground truth bounding boxes and corresponding labels 
+  """
+
   tree = ETree.parse(xml_path)
   root = tree.getroot()
 
   object_ = list()
 
   for cell in root.iter("object"):
-
+    # get the tree with the heading "name"
     subtype = cell.find("name").text.strip()
-
     assert subtype in subtypes_map, "undefined label detected"
 
     box = cell.find("bndbox")
@@ -34,16 +37,18 @@ def parse_annotation(xml_path):
     label = subtypes_map[subtype]
     object_.append([xmin, ymin, xmax, ymax, label])
     
-
   return object_
 
 
 def resize_image(image, object_, target_size=448):
-  """
+   """
   Args:
-    image (numpy array)
-    object_ (list)
-    target_size (int) = target size to resize, in this YOLOv2 448x488 is standard
+    image (numpy array) : input image (H, W, C)
+    object_ (list) : location of the ground truth bounding boxes and corresponding labels
+    target_size (int) : target size to resize, we use 448x448 as default
+  Return:
+    resized_image (numpy array) : resized image (H, W, C)
+    object_ (list) : location of the ground truth bounding boxes that are rescaled 
   """
   height, width = image.shape[:2] 
   resized_image = cv2.resize(image,(target_size, target_size))
@@ -74,13 +79,13 @@ def crop_image(image, object_, crop_size=(40, 80), crop_loc=(0, 0)):
   """
   Crop the image:
     Args:
-      image (numpy array): numpy array (H,W,C)
+      image (numpy array) : numpy array (H,W,C)
       object (list): location of the bounding box and label (xmin, ymin, xmax, ymax, label)
-      crop_size (tuple or list): the desired crop size (W, H)
-      crop_loc (tuple or list): the desired location to crop (x, y)
+      crop_size (tuple or list) : the desired crop size (W, H)
+      crop_loc (tuple or list) : the desired location to crop (x, y)
     return:
-      image_cropped (numpy array)
-      object_ (list) 
+      image_cropped (numpy array) : cropped image of specific demension (H,W,C)
+      object_ (list) : location of the ground truth bounding boxes cropped 
   """
   # crop the image
   xmin, xmax = crop_loc[0], crop_loc[0]+crop_size[0]
@@ -94,8 +99,6 @@ def crop_image(image, object_, crop_size=(40, 80), crop_loc=(0, 0)):
     object_[i][3] = min(object_[i][3], ymax)
 
   return image_cropped, object_
-  
-
 
 
 def flip(image, option_value):
@@ -121,7 +124,7 @@ def flip(image, option_value):
         # no effect
     return image
 
-def add_elastic_transform(image, alpha, sigma, pad_size=30, seed=None):
+def add_elastic_transform(image, alpha, sigma):
     """
     Args:
         image : numpy array of image
@@ -129,22 +132,27 @@ def add_elastic_transform(image, alpha, sigma, pad_size=30, seed=None):
         sigma :  σ is an elasticity coefficient
         random_state = random integer
         Return :
-        image : elastically transformed numpy array of image
+         : elastically transformed numpy array of image
     """
-    if seed is None:
-        seed = randint(1, 100)
-        random_state = np.random.RandomState(seed)
-    else:
-        random_state = np.random.RandomState(seed)
-    shape = image.shape
+    assert image.shape[-1] == 3, "the elastic transform does not support gray scale image"
+    random_state = np.random.RandomState(None)
+
+    pad_size = 20
+    image = cv2.copyMakeBorder(image, pad_size, pad_size, pad_size, pad_size, cv2.BORDER_REFLECT_101)
+
+    shape = image.shape[:2]
     dx = gaussian_filter((random_state.rand(*shape) * 2 - 1),
                          sigma, mode="constant", cval=0) * alpha
     dy = gaussian_filter((random_state.rand(*shape) * 2 - 1),
                          sigma, mode="constant", cval=0) * alpha
 
     x, y = np.meshgrid(np.arange(shape[1]), np.arange(shape[0]))
-    indices = np.reshape(y+dy, (-1, 1)), np.reshape(x+dx, (-1, 1))
-    return map_coordinates(image, indices, order=1).reshape(shape)
+    indices =  np.reshape(y+dy, (-1, 1)), np.reshape(x+dx, (-1, 1))
+    transformed_img = np.empty_like(image)
+    for i in range(image.shape[-1]):
+        transformed_img[:, :, i] = map_coordinates(image[:, :, i], indices).reshape(shape)
+    return transformed_img[pad_size:-pad_size, pad_size:-pad_size,:]
+    
 
 
 def add_gaussian_noise(image, mean=0, std=1):
@@ -204,3 +212,5 @@ def ceil_floor_image(image):
     image[image < 0] = 0
     image = image.astype("uint8")
     return image
+
+  
