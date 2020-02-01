@@ -7,6 +7,10 @@ from torch.utils.data.dataset import Dataset
 from pre_process import *
 
 
+mean = [188.15149897, 177.7183393,  182.56859446] # RGB
+std = [15.0619989,  25.71820621, 18.62466367] #RGB
+
+
 class CellDataset(Dataset):
     def __init__(self, image_path, annotation_path):
         # paths to all images and masks
@@ -24,25 +28,22 @@ class CellDataset(Dataset):
         img_as_np = cv2.imread(image_path)
         img_as_np = cv2.cvtColor(img_as_np, cv2.COLOR_BGR2RGB) # H, W, C
 
-
-        # --- Annotation --- #
+        # Read annotation data 
         object_ = parse_annotation(self.annotation_path + '/' + image_name[:image_name.rfind("jpg")]+"xml")
-
-
-        # --- crop --- #
-        crop_ratio = randint(90, 100)/100
+ 
+        # DATA AUGMENTATION       
+        # --- Crop --- #
+        crop_ratio = randint(90, 100)/100 # this ratio takes different cell sizes into account.
         if crop_ratio != 1:
           crop_loc, crop_size = define_crop_range(img_as_np, crop_ratio)
+          crop_loc = [randint(0, crop_loc[0]), randint(0, crop_loc[1])]
           img_as_np, object_ = crop_image(img_as_np, object_, crop_loc=crop_loc, crop_size=crop_size)
-
-
-        # --- augmentation --- #
-
-        # flip {0: vertical, 1: horizontal, 2: both, 3: none}
+       
+        # --- Flip --- # {0: vertical, 1: horizontal, 2: both, 3: none}
         flip_num = randint(0, 3)
         img_as_np = flip(img_as_np, flip_num)
 
-        # Noise Determine {0: Gaussian_noise, 1: uniform_noise
+        # --- Add Noise --- # {0: Gaussian_noise, 1: uniform_noise}
         if randint(0, 1):
             # Gaussian_noise
             gaus_sd, gaus_mean = randint(0, 20), 0
@@ -52,30 +53,27 @@ class CellDataset(Dataset):
             l_bound, u_bound = randint(-20, 0), randint(0, 20)
             img_as_np = add_uniform_noise(img_as_np, l_bound, u_bound)
 
-        # Brightness
+        # --- Change Brightness --- #
         pix_add = randint(-20, 20)
         img_as_np = change_brightness(img_as_np, pix_add)
-
-        """
-        # Elastic distort {0: distort, 1:no distort}
+        
+        # --- Elastic Deformation --- # {0: distort, 1:no distort}
         sigma = randint(6, 12)
         # sigma = 4, alpha = 34
-        img_as_np = add_elastic_transform(img_as_np, alpha=34, sigma=sigma, pad_size=20)
-        """
-
+        img_as_np = add_elastic_transform(img_as_np, alpha=34, sigma=sigma)
+        cv2.imwrite('messigray.png',img_as_np)
+        
         # --- Resize --- #
-        img_as_np, object_ = resize_image(img_as_np, object_, 448)
-      
+        img_as_np, object_ = resize_image(img_as_np, object_, target_size=448)
+        cv2.imwrite('messigray1.png',img_as_np)
 
-        # Normalize image
-        img_as_np = img_as_np/255
+        # --- Normalize image --- #
+        img_as_np = normalization(img_as_np, mean, std)
 
-        # Convert numpy array to tensor
-        img_as_np = img_as_np.transpose(2, 0, 1)
+        # Change numpy array into pytorch tensor
+        img_as_np = img_as_np.transpose(2, 0, 1) # (H,W,C)->(C,H,W)
         img_as_tensor = torch.from_numpy(img_as_np).float()
         object_as_tensor = torch.tensor(object_)
-
-        print(img_as_np.shape)
  
         return img_as_tensor, object_as_tensor
 
@@ -89,8 +87,6 @@ class CellDataset(Dataset):
           images.append(b[0])
           objects_.append(b[1])
       images = torch.stack(images, dim=0)
-      
-
       return images, objects_
       
       
