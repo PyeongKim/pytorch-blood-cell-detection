@@ -39,6 +39,19 @@ def parse_annotation(xml_path):
     
   return object_
 
+def normalization(image, mean, std):
+  """
+  Args:
+    image (numpy) : input image (H,W,C)
+    mean (list) : mean of each channel of the image (R,G,B)
+    std (list) : std of each channel of the image (R,G,B)
+  Return:
+    normalized_image (numpy) : normalized image (H,W,C)
+  """
+  normalized_image = np.empty_like(image)
+  for c in range(image.shape[-1]):
+    normalized_image[:,:,c] = (image[:,:,c] - mean[c])/std[c]
+  return normalized_image
 
 def resize_image(image, object_, target_size=448):
    """
