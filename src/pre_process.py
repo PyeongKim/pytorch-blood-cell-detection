@@ -48,7 +48,7 @@ def normalization(image, mean, std):
   Return:
     normalized_image (numpy) : normalized image (H,W,C)
   """
-  normalized_image = np.empty_like(image)
+  normalized_image = np.zeros(image.shape)
   for c in range(image.shape[-1]):
     normalized_image[:,:,c] = (image[:,:,c] - mean[c])/std[c]
   return normalized_image
