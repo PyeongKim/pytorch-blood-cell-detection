@@ -54,13 +54,15 @@ class Yolo_v2(nn.Module):
     # Second Stage (b)
     self.layer_21 = nn.Sequential(nn.Conv2d(512, 64, 1, 1, 0, bias=False),nn.BatchNorm2d(64),
                                  nn.LeakyReLU(0.1, inplace=True))
-    self.space_to_depth_x2 = nn.Unfold(kernel_size=(2,2), stride=2)
+    self.block_size = 2
+    self.space_to_depth_x2 = nn.Unfold(kernel_size=(self.block_size, self.block_size), stride=2)
 
     # Final Stage
     self.layer_22 = nn.Sequential(nn.Conv2d(256 + 1024, 1024, 3, 1, 1, bias=False), nn.BatchNorm2d(1024),
                                   nn.LeakyReLU(0.1, inplace=True))
     self.layer_23 = nn.Sequential(nn.Conv2d(1024, self.num_boxes*(4+1+self.num_classes), 1, 1, 0, bias=False), 
-                                  nn.LeakyReLU(0.1, inplace=True))    
+                                  nn.LeakyReLU(0.1, inplace=True))   
+    
   def forward(self, input_image):
     # First Stage
     output = self.layer_1(input_image)
@@ -95,7 +97,7 @@ class Yolo_v2(nn.Module):
     skip_connection = self.layer_21(skip_connection)
     n, c, h, w = skip_connection.size()
     skip_connection = self.space_to_depth_x2(skip_connection)
-    skip_connection = skip_connection.view(n, c * 2 * 2, h // 2, w // 2)
+    skip_connection = skip_connection.view(n, c * self.block_size**2, h // self.block_size, w // self.block_size)
     print("skip_: ",skip_connection.size())
     output = torch.cat((output, skip_connection), 1)
     
